@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b5bd6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<title>NalandaKnowledgeBook</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1c2033;--mu:#636a85;--ac:#5b5bd6;--ac2:#eceaff;--bd:#e1e4f0}
+@media (prefers-color-scheme:dark){:root{--bg:#14162a;--card:#1e2140;--tx:#eceefc;--mu:#a0a6c8;--ac:#8c8cff;--ac2:#2a2d57;--bd:#33376a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+.w{max-width:760px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+h1{font-size:20px;margin:0}h2{font-size:17px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:110px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:520px){.row{grid-template-columns:1fr}}
+button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.g{background:var(--ac2);color:var(--ac)}button:disabled{opacity:.5}
+.mu{color:var(--mu);font-size:13px}.q{border-top:1px solid var(--bd);padding:10px 0}
+details summary{cursor:pointer;color:var(--ac);font-weight:600}
+li{margin:6px 0}.t{display:inline-block;background:var(--ac2);color:var(--ac);border-radius:8px;padding:1px 8px;font-size:13px;font-weight:600;margin-right:6px}
+.hide{display:none}.chip{background:var(--ac2);color:var(--ac);padding:6px 12px;margin:0 6px 6px 0;border-radius:18px}.chip.on{background:var(--ac);color:#fff}.add{display:flex;gap:8px}
+.err{color:#d33}
+</style></head><body><div class="w">
+<header><h1>📚 NalandaKnowledgeBook</h1><div><span id="who" class="mu"></span> <button class="g" id="out" hidden>Sign out</button></div></header>
+
+<div id="login" class="card hide">
+<h2>Set up your profile</h2>
+<p class="mu">Everything is stored only on this device.</p>
+<label>Name</label><input id="pn">
+<div class="row"><div><label>Class / level</label><select id="pc"><option>Class 1</option><option>Class 2</option><option>Class 3</option><option>Class 4</option><option>Class 5</option><option>Class 6</option><option>Class 7</option><option selected>Class 8</option><option>Class 9</option><option>Class 10</option><option>Class 11</option><option>Class 12</option><option>College</option></select></div>
+<div><label>School</label><input id="ps"></div></div>
+<label>Preferred language</label><input id="pl" placeholder="English, Hinglish, Bengali…">
+<h2 style="margin-top:16px">AI provider (your own key)</h2>
+<div class="row"><div><label>Provider</label><select id="pp"></select></div><div><label>Model</label><input id="pm" autocapitalize="off"></div></div>
+<div id="bw" class="hide"><label>API base URL</label><input id="pb" placeholder="https://…/v1" autocapitalize="off"></div>
+<label>API key</label><input id="pk" type="password" autocomplete="off">
+<p class="mu">Your key stays on this device and is sent only to the provider you pick. Ask a parent or teacher to create the key for you. Some providers (Gemini, Groq) offer free tiers. Model names change over time, so edit the model box if a provider rejects it.</p>
+<p><button id="save">Save and start</button></p>
+</div>
+
+<div id="app" class="hide">
+<div class="card">
+<h2>Your subjects</h2><div id="subs"></div>
+<div class="add"><input id="ns" placeholder="Add a subject (e.g. Physics)"><button class="g" id="addsub">Add</button></div>
+<p class="mu" id="lvl"></p>
+<p><button class="g" id="chk">Check my level</button> <button class="g" id="rm">Remove subject</button></p><div id="diag"></div>
+<h2 style="margin-top:18px">What are you studying today?</h2>
+<label>Topic or notes (any language, Hinglish is fine)</label><textarea id="notes"></textarea>
+<label>Or upload a text file (.txt, .md, .csv)</label><input type="file" id="file" accept=".txt,.md,.csv,.json">
+<label>Minutes available</label><input id="min" type="number" min="10" max="240" value="30">
+<p><button id="go">Make my study plan</button> <button class="g" id="prof">Settings</button></p>
+<p class="mu" id="st"></p></div>
+<div id="res"></div>
+<div class="card hide" id="histc"><h2>Recent sessions</h2><div id="hist"></div></div>
+</div>
+<p class="mu"><a href="privacy.html">Privacy policy</a></p></div>
+<script>
+const $=id=>document.getElementById(id);
+const h=(t,a,...k)=>{const e=document.createElement(t);Object.assign(e,a||{});k.forEach(c=>e.append(c));return e};
+/* ---------- local db ---------- */
+const kv={db:null,
+async o(){if(this.db)return this.db;return this.db=await new Promise((r,j)=>{const q=indexedDB.open("nkb",1);q.onupgradeneeded=()=>q.result.createObjectStore("kv");q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error)})},
+async get(k){try{const d=await this.o();return await new Promise(r=>{const q=d.transaction("kv").objectStore("kv").get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(undefined)})}catch(e){try{return JSON.parse(localStorage.getItem(k))}catch(_){return undefined}}},
+async set(k,v){try{const d=await this.o();await new Promise(r=>{const t=d.transaction("kv","readwrite");t.objectStore("kv").put(v,k);t.oncomplete=r;t.onerror=r})}catch(e){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}}};
+/* ---------- LLM providers (bring your own key) ---------- */
+const PRV={
+ openai:{n:"OpenAI",kind:"oai",base:"https://api.openai.com/v1",model:"gpt-4o-mini"},
+ anthropic:{n:"Anthropic Claude",kind:"anth",model:"claude-haiku-5-5"},
+ gemini:{n:"Google Gemini (free tier)",kind:"gem",model:"gemini-2.0-flash"},
+ groq:{n:"Groq (free tier)",kind:"oai",base:"https://api.groq.com/openai/v1",model:"llama-3.3-70b-versatile"},
+ openrouter:{n:"OpenRouter",kind:"oai",base:"https://openrouter.ai/api/v1",model:"openai/gpt-4o-mini"},
+ custom:{n:"Other (OpenAI-compatible)",kind:"oai",base:"",model:""}};
+async function llm(text){
+ const k=P.key,pv=PRV[P.provider]||PRV.custom,m=P.model||pv.model;let r,j;
+ if(!k)throw new Error("Add your API key in Settings.");
+ if(pv.kind==="anth"){r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":k,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:m,max_tokens:1800,messages:[{role:"user",content:text}]})});
+  j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||r.status);return j.content.map(c=>c.text||"").join("")}
+ if(pv.kind==="gem"){r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(m)+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":k},body:JSON.stringify({contents:[{parts:[{text}]}]})});
+  j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||r.status);return j.candidates[0].content.parts.map(p=>p.text||"").join("")}
+ const base=(P.base||pv.base||"").replace(/\/$/,"");if(!base)throw new Error("Add the API base URL in Settings.");
+ r=await fetch(base+"/chat/completions",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify({model:m,messages:[{role:"user",content:text}]})});
+ j=await r.json();if(!r.ok)throw new Error(j.error&&(j.error.message||j.error)||r.status);return j.choices[0].message.content}
+function pj(t){t=t.replace(/```json|```/g,"");const i=t.indexOf("{"),e=t.lastIndexOf("}");return JSON.parse(t.slice(i,e+1))}
+const ai=async p=>pj(await llm(p));
+/* ---------- profile / session ---------- */
+let P=null,fileText="",SUB="",SUBS=[],LV={};
+const lang=()=>P&&P.language||"English";
+$("pp").replaceChildren(...Object.entries(PRV).map(([v,o])=>h("option",{value:v,textContent:o.n})));
+$("pp").onchange=()=>{const o=PRV[$("pp").value];$("pm").value=o.model;$("pb").value=o.base||"";$("bw").classList.toggle("hide",$("pp").value!=="custom")};
+async function init(){P=await kv.get("profile");const s=await kv.get("session");if(P&&s)showApp();else showLogin()}
+function showLogin(){$("app").classList.add("hide");$("login").classList.remove("hide");$("out").hidden=true;$("who").textContent="";
+ if(P){$("pn").value=P.name||"";$("pc").value=P.cls||"Class 8";$("ps").value=P.school||"";$("pl").value=P.language||"";$("pp").value=P.provider||"openai";$("pm").value=P.model||"";$("pb").value=P.base||"";$("pk").value=P.key||""}else{$("pp").value="gemini";$("pp").onchange()}
+ $("bw").classList.toggle("hide",$("pp").value!=="custom")}
+async function showApp(){$("login").classList.add("hide");$("app").classList.remove("hide");$("out").hidden=false;$("who").textContent="Hi, "+P.name+" ("+P.cls+")";loadHist();loadSubs()}
+$("save").onclick=async()=>{const n=$("pn").value.trim();if(!n){$("pn").focus();return}
+ P={name:n,cls:$("pc").value,school:$("ps").value.trim(),language:$("pl").value.trim()||"English",provider:$("pp").value,model:$("pm").value.trim(),base:$("pb").value.trim(),key:$("pk").value.trim()};
+ await kv.set("profile",P);await kv.set("session",{at:Date.now()});showApp()};
+$("out").onclick=async()=>{await kv.set("session",null);showLogin()};
+$("prof").onclick=showLogin;
+$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;if(f.size>200000){$("st").textContent="File too large (max 200 KB).";return}
+ const r=new FileReader();r.onload=()=>{fileText=String(r.result).slice(0,12000);$("st").textContent="Loaded "+f.name+"."};r.readAsText(f)};
+/* ---------- subjects and level ---------- */
+const DEF=["Maths","Science","English","Social Science","Hindi"];
+async function loadSubs(){SUBS=(await kv.get("subs"))||DEF.slice();LV=(await kv.get("lv"))||{};if(!SUB||!SUBS.includes(SUB))SUB=SUBS[0]||"";drawSubs()}
+function drawSubs(){const b=$("subs");b.replaceChildren();SUBS.forEach(s=>{const e=h("button",{className:"chip"+(s===SUB?" on":""),textContent:s});e.onclick=()=>{SUB=s;drawSubs()};b.append(e)});
+ const l=LV[SUB];$("lvl").textContent=SUB?(l?SUB+" ("+P.cls+"): "+l.level+". "+l.note:SUB+" ("+P.cls+"): level not assessed yet. Tap “Check my level”."):"Add a subject to begin.";$("diag").replaceChildren();$("rm").hidden=!SUB;$("chk").hidden=!SUB}
+$("addsub").onclick=async()=>{const v=$("ns").value.trim();if(!v)return;if(!SUBS.some(x=>x.toLowerCase()===v.toLowerCase()))SUBS.push(v);SUB=SUBS.find(x=>x.toLowerCase()===v.toLowerCase());$("ns").value="";await kv.set("subs",SUBS);drawSubs()};
+$("rm").onclick=async()=>{SUBS=SUBS.filter(x=>x!==SUB);SUB=SUBS[0]||"";await kv.set("subs",SUBS);drawSubs()};
+$("chk").onclick=async()=>{if(!SUB)return;const d=$("diag");d.textContent="Preparing questions…";
+ try{const topic=$("notes").value.trim().slice(0,300);
+ const qs=await ai(`Class: ${P.cls}. Subject: ${SUB}. Topic (optional): "${topic}". Language: ${lang()}. Write 3 diagnostic questions of increasing difficulty (easy at one class below, medium at this class, harder at one class above) to gauge understanding. Return ONLY JSON: {"questions":["...","...","..."]}`);
+ const Q=(qs.questions||[]).slice(0,3);if(!Q.length)throw new Error("No questions returned");
+ d.replaceChildren(h("p",{className:"mu",textContent:"Answer briefly. Saying “I don’t know” is fine."}));
+ const tas=Q.map((q,i)=>{const t=h("textarea",{});t.style.minHeight="60px";d.append(h("label",{textContent:(i+1)+". "+q}),t);return t});
+ const b=h("button",{textContent:"Check my answers"});d.append(h("p",{},b));
+ b.onclick=async()=>{b.disabled=true;b.textContent="Checking…";try{
+  const r=await ai(`You are a kind, expert teacher. Class ${P.cls}, subject ${SUB}, language ${lang()}. Questions and student answers:\n${Q.map((q,i)=>`Q${i+1}: ${q}\nA: ${tas[i].value||"(blank)"}`).join("\n")}\nJudge the student's real understanding from the answers only. Return ONLY JSON: {"level":"Beginner|Developing|Proficient|Advanced","note":"one encouraging sentence on strengths and the next gap to fix"}`);
+  LV[SUB]={level:r.level||"Developing",note:r.note||"",at:Date.now()};await kv.set("lv",LV);drawSubs()}catch(e){b.disabled=false;b.textContent="Try again"}}
+ }catch(e){d.replaceChildren(h("span",{className:"err",textContent:"AI error: "+e.message}))}};
+/* ---------- study plan ---------- */
+$("go").onclick=async()=>{const src=($("notes").value+"\n"+fileText).trim();if(!src){$("st").textContent="Add a topic, notes or a file first.";return}
+ const m=Math.max(10,+$("min").value||30);$("go").disabled=true;$("st").className="mu";$("st").textContent="Thinking…";$("res").replaceChildren();
+ try{const d=await ai(`You are a warm, clear tutor. Subject: ${SUB||"general"}. Student class: ${P.cls}. Measured understanding: ${(LV[SUB]&&LV[SUB].level)||"not assessed, so infer from their notes and adapt"}. Preferred language: ${lang()} (mix naturally if they code-switch, e.g. Hinglish). Minutes today: ${m}. Match vocabulary, depth and examples to that class and level; for Beginner go slower, for Advanced add a stretch idea.
+Student input:\n"""${src}"""\nReturn ONLY JSON: {"cleaned":"notes rewritten cleanly in their language","analogy":"one real-life analogy","bullets":["3 simple bullets using the analogy"],"schedule":[{"t":minutes_int,"task":"..."}] (minutes sum to ${m}),"questions":[{"q":"...","a":"..."},{"q":"...","a":"..."}]} Exactly 3 bullets and 2 questions. Be encouraging and simple. If unsure of a fact, say so.`);
+  render(d);$("st").textContent="";const H=(await kv.get("hist"))||[];H.unshift({at:Date.now(),topic:(SUB?SUB+": ":"")+src.slice(0,50),d});await kv.set("hist",H.slice(0,10));loadHist()
+ }catch(e){$("st").className="err";$("st").textContent="AI error: "+e.message}
+ $("go").disabled=false};
+function render(d){const R=$("res");R.replaceChildren();
+ const c2=h("div",{className:"card"},h("h2",{},"2. Key ideas"),h("p",{className:"mu",textContent:"Analogy: "+(d.analogy||"")}));
+ const ul=h("ul");(d.bullets||[]).slice(0,3).forEach(b=>ul.append(h("li",{textContent:b})));c2.append(ul);
+ const c3=h("div",{className:"card"},h("h2",{},"3. Today’s schedule"));(d.schedule||[]).forEach(s=>c3.append(h("div",{className:"q"},h("span",{className:"t",textContent:s.t+" min"}),s.task||"")));
+ const c4=h("div",{className:"card"},h("h2",{},"4. Self-check"));
+ (d.questions||[]).slice(0,2).forEach((q,i)=>c4.append(h("div",{className:"q"},h("p",{textContent:(i+1)+". "+q.q}),h("details",{},h("summary",{},"Show answer"),h("p",{textContent:q.a})))));
+ R.append(h("div",{className:"card"},h("h2",{},"1. Your notes, cleaned up"),h("p",{textContent:d.cleaned||""})),c2,c3,c4,h("p",{className:"mu",textContent:"You’ve got this. Small steps every day add up. 💪"}))}
+async function loadHist(){const H=(await kv.get("hist"))||[];$("histc").classList.toggle("hide",!H.length);const b=$("hist");b.replaceChildren();
+ H.forEach(x=>{const e=h("div",{className:"q"},h("button",{className:"g",textContent:new Date(x.at).toLocaleDateString()+" · "+x.topic}));e.firstChild.onclick=()=>{render(x.d);scrollTo(0,0)};b.append(e)})}
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+init();
+</script></body></html>
