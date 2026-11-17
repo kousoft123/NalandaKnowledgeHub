@@ -54,6 +54,7 @@ li{margin:6px 0}.t{display:inline-block;background:var(--ac2);color:var(--ac);bo
 <label>Topic or notes (any language, Hinglish is fine)</label><textarea id="notes"></textarea>
 <label>Or upload a text file (.txt, .md, .csv)</label><input type="file" id="file" accept=".txt,.md,.csv,.json">
 <label>Minutes available</label><input id="min" type="number" min="10" max="240" value="30">
+<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="wk" checked style="width:auto"> Look up Wikipedia (internet) for facts</label>
 <p><button id="go">Make my study plan</button> <button class="g" id="prof">Settings</button></p>
 <p class="mu" id="st"></p></div>
 <div id="res"></div>
@@ -80,7 +81,7 @@ const PRV={
 async function llm(text){
  const k=P.key,pv=PRV[P.provider]||PRV.custom,m=P.model||pv.model;let r,j;
  if(!k)throw new Error("Add your API key in Settings.");
- if(pv.kind==="anth"){r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":k,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:m,max_tokens:1800,messages:[{role:"user",content:text}]})});
+ if(pv.kind==="anth"){r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":k,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:m,max_tokens:4000,messages:[{role:"user",content:text}]})});
   j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||r.status);return j.content.map(c=>c.text||"").join("")}
  if(pv.kind==="gem"){r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(m)+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":k},body:JSON.stringify({contents:[{parts:[{text}]}]})});
   j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||r.status);return j.candidates[0].content.parts.map(p=>p.text||"").join("")}
@@ -126,20 +127,50 @@ $("chk").onclick=async()=>{if(!SUB)return;const d=$("diag");d.textContent="Prepa
   LV[SUB]={level:r.level||"Developing",note:r.note||"",at:Date.now()};await kv.set("lv",LV);drawSubs()}catch(e){b.disabled=false;b.textContent="Try again"}}
  }catch(e){d.replaceChildren(h("span",{className:"err",textContent:"AI error: "+e.message}))}};
 /* ---------- study plan ---------- */
+const cl=t=>{t=String(t||"").trim();if(t.length<=300)return t;const c=t.slice(0,300),i=Math.max(c.lastIndexOf(". "),c.lastIndexOf("।"));return i>140?c.slice(0,i+1):c.slice(0,299)+"…"};
+async function wiki(q){try{const u="https://en.wikipedia.org/w/api.php?format=json&origin=*&";
+ const s=await(await fetch(u+"action=query&list=search&srlimit=1&srsearch="+encodeURIComponent(q))).json();const t=s.query.search[0]&&s.query.search[0].title;if(!t)return null;
+ const e=await(await fetch(u+"action=query&prop=extracts|pageimages&exintro=1&explaintext=1&exchars=1800&piprop=thumbnail&pithumbsize=600&redirects=1&titles="+encodeURIComponent(t))).json();
+ const pg=Object.values(e.query.pages)[0];return{title:pg.title,text:pg.extract||"",img:pg.thumbnail&&pg.thumbnail.source||"",url:"https://en.wikipedia.org/wiki/"+encodeURIComponent(pg.title.replace(/ /g,"_"))}}catch(e){return null}}
 $("go").onclick=async()=>{const src=($("notes").value+"\n"+fileText).trim();if(!src){$("st").textContent="Add a topic, notes or a file first.";return}
- const m=Math.max(10,+$("min").value||30);$("go").disabled=true;$("st").className="mu";$("st").textContent="Thinking…";$("res").replaceChildren();
- try{const d=await ai(`You are a warm, clear tutor. Subject: ${SUB||"general"}. Student class: ${P.cls}. Measured understanding: ${(LV[SUB]&&LV[SUB].level)||"not assessed, so infer from their notes and adapt"}. Preferred language: ${lang()} (mix naturally if they code-switch, e.g. Hinglish). Minutes today: ${m}. Match vocabulary, depth and examples to that class and level; for Beginner go slower, for Advanced add a stretch idea.
-Student input:\n"""${src}"""\nReturn ONLY JSON: {"cleaned":"notes rewritten cleanly in their language","analogy":"one real-life analogy","bullets":["3 simple bullets using the analogy"],"schedule":[{"t":minutes_int,"task":"..."}] (minutes sum to ${m}),"questions":[{"q":"...","a":"..."},{"q":"...","a":"..."}]} Exactly 3 bullets and 2 questions. Be encouraging and simple. If unsure of a fact, say so.`);
+ const m=Math.max(10,+$("min").value||30);$("go").disabled=true;$("st").className="mu";$("res").replaceChildren();let w=null;
+ try{if($("wk").checked){$("st").textContent="Searching Wikipedia…";w=await wiki(src.split("\n")[0].slice(0,80))}
+  $("st").textContent="Writing your lesson…";
+  const d=await ai(`You are a warm, clear tutor. Known subjects: ${JSON.stringify(SUBS)}. Selected subject: ${SUB||"none"}. Student class: ${P.cls}. Measured understanding: ${(LV[SUB]&&LV[SUB].level)||"not assessed, so infer from their notes and adapt"}. Preferred language: ${lang()} (mix naturally if they code-switch, e.g. Hinglish). Minutes today: ${m}. Match vocabulary and depth to the class; keep facts correct and say so if unsure.
+${w&&w.text?`Use this Wikipedia extract (page: ${w.title}) as the factual base. Simplify it for the class level; do not copy its sentences:\n"""${w.text}"""\n`:""}Student topic or notes:\n"""${src}"""\nReturn ONLY JSON: {"subject":"best subject for this topic: a known subject name if it fits, else a short new subject name","intro":"Introduction","desc":"Description","use":"Usability: real-life uses","concl":"Conclusion","diagram":{"title":"short title","nodes":["3 to 6 short parts or steps, max 24 characters each, in order"]},"schedule":[{"t":minutes_int,"task":"..."}] (minutes sum to ${m}),"questions":[{"q":"...","a":"short answer"}]}. Each of intro, desc, use and concl must be between 150 and 300 characters long, count carefully. Exactly 10 questions, easy to hard, with short answers.`);
+  const ds=String(d.subject||"").trim();
+  if(ds&&ds.toLowerCase()!==(SUB||"").toLowerCase()){const f=SUBS.find(x=>x.toLowerCase()===ds.toLowerCase());if(f)SUB=f;else{SUBS.push(ds);SUB=ds;await kv.set("subs",SUBS)}d.note="This topic looks like “"+SUB+"”, so the subject was switched automatically.";drawSubs()}
+  d.wiki=w?{title:w.title,url:w.url,img:w.img,text:w.text.slice(0,900)}:null;
   render(d);$("st").textContent="";const H=(await kv.get("hist"))||[];H.unshift({at:Date.now(),topic:(SUB?SUB+": ":"")+src.slice(0,50),d});await kv.set("hist",H.slice(0,10));loadHist()
  }catch(e){$("st").className="err";$("st").textContent="AI error: "+e.message}
  $("go").disabled=false};
+function dia(dg){const N=((dg&&dg.nodes)||[]).slice(0,6).map(x=>String(x).slice(0,28));if(N.length<2)return null;
+ const NS="http://www.w3.org/2000/svg",s=document.createElementNS(NS,"svg");s.setAttribute("viewBox","0 0 320 "+N.length*64);s.style.cssText="width:100%;max-width:360px;display:block;margin:auto";
+ const mk=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e};
+ N.forEach((n,i)=>{const y=i*64+4,r=mk("rect",{x:20,y,width:280,height:44,rx:12});r.style.cssText="fill:var(--ac2);stroke:var(--ac);stroke-width:1.5";
+  const t=mk("text",{x:160,y:y+27,"text-anchor":"middle"});t.style.cssText="fill:var(--tx);font:600 14px system-ui,sans-serif";t.textContent=(i+1)+". "+n;s.append(r,t);
+  if(i<N.length-1){const a=mk("path",{d:`M160 ${y+44}L160 ${y+60}M155 ${y+55}L160 ${y+60}L165 ${y+55}`,fill:"none"});a.style.cssText="stroke:var(--ac);stroke-width:2";s.append(a)}});return s}
+let CTX="",CH=[];
 function render(d){const R=$("res");R.replaceChildren();
- const c2=h("div",{className:"card"},h("h2",{},"2. Key ideas"),h("p",{className:"mu",textContent:"Analogy: "+(d.analogy||"")}));
- const ul=h("ul");(d.bullets||[]).slice(0,3).forEach(b=>ul.append(h("li",{textContent:b})));c2.append(ul);
- const c3=h("div",{className:"card"},h("h2",{},"3. Today’s schedule"));(d.schedule||[]).forEach(s=>c3.append(h("div",{className:"q"},h("span",{className:"t",textContent:s.t+" min"}),s.task||"")));
- const c4=h("div",{className:"card"},h("h2",{},"4. Self-check"));
- (d.questions||[]).slice(0,2).forEach((q,i)=>c4.append(h("div",{className:"q"},h("p",{textContent:(i+1)+". "+q.q}),h("details",{},h("summary",{},"Show answer"),h("p",{textContent:q.a})))));
- R.append(h("div",{className:"card"},h("h2",{},"1. Your notes, cleaned up"),h("p",{textContent:d.cleaned||""})),c2,c3,c4,h("p",{className:"mu",textContent:"You’ve got this. Small steps every day add up. 💪"}))}
+ if(d.note)R.append(h("p",{className:"mu",textContent:"ℹ️ "+d.note}));
+ const S=[["Introduction",d.intro],["Description",d.desc],["Usability",d.use],["Conclusion",d.concl]].filter(x=>x[1]);if(!S.length&&d.cleaned)S.push(["Notes",d.cleaned]);
+ const c1=h("div",{className:"card"},h("h2",{},"Topic overview"));
+ if(d.wiki&&d.wiki.img){const im=h("img",{src:d.wiki.img,alt:d.wiki.title,referrerPolicy:"no-referrer"});im.style.cssText="max-width:100%;border-radius:12px;display:block;margin:0 auto 8px";c1.append(im)}
+ S.forEach(([l,t])=>c1.append(h("p",{},h("b",{textContent:l+": "}),cl(t))));
+ if(d.wiki){const a=h("a",{href:d.wiki.url,target:"_blank",rel:"noopener",textContent:"Wikipedia: "+d.wiki.title});c1.append(h("p",{className:"mu"},"Source: ",a))}
+ R.append(c1);CTX=S.map(x=>x[1]).join(" ")+(d.wiki?" Reference: "+d.wiki.text:"");CH=[];
+ const g=dia(d.diagram);if(g)R.append(h("div",{className:"card"},h("h2",{textContent:"Diagram: "+((d.diagram&&d.diagram.title)||"")}),g));
+ if((d.schedule||[]).length){const c3=h("div",{className:"card"},h("h2",{},"Today’s schedule"));d.schedule.forEach(s=>c3.append(h("div",{className:"q"},h("span",{className:"t",textContent:s.t+" min"}),s.task||"")));R.append(c3)}
+ const c4=h("div",{className:"card"},h("h2",{},"10-question practice set"),h("p",{className:"mu",textContent:"Try each one first, then tap to check."}));
+ (d.questions||[]).slice(0,10).forEach((q,i)=>c4.append(h("div",{className:"q"},h("p",{textContent:(i+1)+". "+q.q}),h("details",{},h("summary",{},"Show answer"),h("p",{textContent:q.a})))));R.append(c4);
+ const box=h("div",{}),inp=h("input",{placeholder:"Ask anything about this topic…"}),btn=h("button",{textContent:"Ask"}),row=h("div",{className:"add"},inp,btn);
+ const draw=()=>{box.replaceChildren(...CH.map(x=>{const p=h("p",{textContent:x.t});p.style.cssText=x.r==="u"?"background:var(--ac2);border-radius:12px;padding:8px 12px;margin:6px 0 6px 20%":"border:1px solid var(--bd);border-radius:12px;padding:8px 12px;margin:6px 20% 6px 0;white-space:pre-wrap";return p}))};
+ const send=async()=>{const q=inp.value.trim();if(!q||btn.disabled)return;inp.value="";btn.disabled=true;CH.push({r:"u",t:q});draw();
+  const hist=CH.slice(-7,-1).map(x=>(x.r==="u"?"Student: ":"Tutor: ")+x.t).join("\n");
+  try{const t=await llm(`You are a kind expert tutor for ${P.cls}, subject ${SUB||"general"}. Reply in ${lang()} (mix naturally if the student does). Topic notes: ${CTX}\n${hist}\nStudent: ${q}\nAnswer simply in under 600 characters. If the question is unrelated to studying or unsafe, politely steer back to the topic. If unsure, say so.`);CH.push({r:"a",t:t.trim()})}catch(e){CH.push({r:"a",t:"AI error: "+e.message})}
+  draw();btn.disabled=false};
+ btn.onclick=send;inp.onkeydown=e=>{if(e.key==="Enter")send()};
+ R.append(h("div",{className:"card"},h("h2",{},"💬 Ask your tutor"),box,row),h("p",{className:"mu",textContent:"You’ve got this. Small steps every day add up. 💪"}))}
 async function loadHist(){const H=(await kv.get("hist"))||[];$("histc").classList.toggle("hide",!H.length);const b=$("hist");b.replaceChildren();
  H.forEach(x=>{const e=h("div",{className:"q"},h("button",{className:"g",textContent:new Date(x.at).toLocaleDateString()+" · "+x.topic}));e.firstChild.onclick=()=>{render(x.d);scrollTo(0,0)};b.append(e)})}
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
