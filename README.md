@@ -46,6 +46,10 @@ Notes: this identifies the student on the device only. There is no server, so th
 ## Local folder
 Desktop Chrome/Edge: Choose folder saves topics/ and chats/ as .md files under NalandaKnowledgeBook/. Android browsers cannot write to a chosen folder; use Export backup there.
 ## Screen
-![Alt text](images/Home.png, "Home Screen")
-![Alt text](images/detail.png, "Detail Screen")
+<table>
+  <tr>
+    <td align="center"><img src="images/Home.png" alt="Home Screen" width="300"><br><b>Home Screen</b></td>
+    <td align="center"><img src="images/detail.png" alt="Detail Screen" width="300"><br><b>Detail Screen</b></td>
+  </tr>
+</table>
 
