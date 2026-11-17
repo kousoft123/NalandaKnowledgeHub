@@ -35,3 +35,13 @@ Verify: https://developers.google.com/digital-asset-links/tools/generator
 ## Keep in mind
 - API keys are stored in the app's local storage on the device. Fine for a personal key; not for a shared key.
 - AI answers can be wrong; keep the disclaimer in the privacy policy and listing.
+
+## Google sign-in (SSO) setup
+1. Google Cloud Console > APIs & Services > Credentials > Create credentials > OAuth client ID > Web application.
+2. Authorized JavaScript origins: https://YOURDOMAIN (and http://localhost:8080 for testing).
+3. Paste the client ID into `const GOOGLE_CLIENT_ID=""` near the top of the script in index.html, redeploy.
+4. Configure the OAuth consent screen (app name, privacy policy URL). Until it is published, only test users can sign in.
+Notes: this identifies the student on the device only. There is no server, so the sign-in token is not verified by a backend and data does not sync between devices.
+
+## Local folder
+Desktop Chrome/Edge: Choose folder saves topics/ and chats/ as .md files under NalandaKnowledgeBook/. Android browsers cannot write to a chosen folder; use Export backup there.

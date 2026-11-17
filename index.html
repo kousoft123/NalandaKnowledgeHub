@@ -30,6 +30,7 @@ li{margin:6px 0}.t{display:inline-block;background:var(--ac2);color:var(--ac);bo
 <header><h1>📚 NalandaKnowledgeBook</h1><div><span id="who" class="mu"></span> <button class="g" id="out" hidden>Sign out</button></div></header>
 
 <div id="login" class="card hide">
+<div id="sso" class="hide"><h2>Sign in</h2><div id="gbtn"></div><p class="mu">Or set up a profile on this device below.</p><hr style="border:0;border-top:1px solid var(--bd)"></div>
 <h2>Set up your profile</h2>
 <p class="mu">Everything is stored only on this device.</p>
 <label>Name</label><input id="pn">
@@ -58,12 +59,14 @@ li{margin:6px 0}.t{display:inline-block;background:var(--ac2);color:var(--ac);bo
 <p><button id="go">Describe</button> <button class="g" id="prof">Settings</button></p>
 <p class="mu" id="st"></p></div>
 <div id="res"></div>
+<div class="card" id="stc"><h2>📁 Local folder &amp; backup</h2><p class="mu" id="stm"></p><p><button class="g" id="pick">Choose folder</button> <button class="g" id="recon" hidden>Reconnect folder</button> <button class="g" id="exp">Export backup</button></p></div>
 <div class="card hide" id="histc"><h2>Recent sessions</h2><div id="hist"></div></div>
 </div>
 <p class="mu"><a href="privacy.html">Privacy policy</a></p></div>
 <script>
 const $=id=>document.getElementById(id);
 const h=(t,a,...k)=>{const e=document.createElement(t);Object.assign(e,a||{});k.forEach(c=>e.append(c));return e};
+const GOOGLE_CLIENT_ID=""; /* paste your Google OAuth Web client ID here to turn on Google sign-in */
 /* ---------- local db ---------- */
 const kv={db:null,
 async o(){if(this.db)return this.db;return this.db=await new Promise((r,j)=>{const q=indexedDB.open("nkb",1);q.onupgradeneeded=()=>q.result.createObjectStore("kv");q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error)})},
@@ -96,15 +99,15 @@ let P=null,fileText="",SUB="",SUBS=[],LV={};
 const lang=()=>P&&P.language||"English";
 $("pp").replaceChildren(...Object.entries(PRV).map(([v,o])=>h("option",{value:v,textContent:o.n})));
 $("pp").onchange=()=>{const o=PRV[$("pp").value];$("pm").value=o.model;$("pb").value=o.base||"";$("bw").classList.toggle("hide",$("pp").value!=="custom")};
-async function init(){P=await kv.get("profile");const s=await kv.get("session");if(P&&s)showApp();else showLogin()}
-function showLogin(){$("app").classList.add("hide");$("login").classList.remove("hide");$("out").hidden=true;$("who").textContent="";
+async function init(){P=await kv.get("profile");const s=await kv.get("session");if(P&&s&&(!s.exp||s.exp>Date.now()))showApp();else showLogin()}
+function showLogin(){ssoInit();$("app").classList.add("hide");$("login").classList.remove("hide");$("out").hidden=true;$("who").textContent="";
  if(P){$("pn").value=P.name||"";$("pc").value=P.cls||"Class 8";$("ps").value=P.school||"";$("pl").value=P.language||"";$("pp").value=P.provider||"openai";$("pm").value=P.model||"";$("pb").value=P.base||"";$("pk").value=P.key||""}else{$("pp").value="qwen";$("pp").onchange()}
  $("bw").classList.toggle("hide",$("pp").value!=="custom")}
-async function showApp(){$("login").classList.add("hide");$("app").classList.remove("hide");$("out").hidden=false;$("who").textContent="Hi, "+P.name+" ("+P.cls+")";loadHist();loadSubs()}
+async function showApp(){$("login").classList.add("hide");$("app").classList.remove("hide");$("out").hidden=false;$("who").textContent="Hi, "+P.name+" ("+P.cls+")";loadHist();loadSubs();updStor()}
 $("save").onclick=async()=>{const n=$("pn").value.trim();if(!n){$("pn").focus();return}
- P={name:n,cls:$("pc").value,school:$("ps").value.trim(),language:$("pl").value.trim()||"English",provider:$("pp").value,model:$("pm").value.trim(),base:$("pb").value.trim(),key:$("pk").value.trim()};
- await kv.set("profile",P);await kv.set("session",{at:Date.now()});showApp()};
-$("out").onclick=async()=>{await kv.set("session",null);showLogin()};
+ P={name:n,cls:$("pc").value,school:$("ps").value.trim(),language:$("pl").value.trim()||"English",provider:$("pp").value,model:$("pm").value.trim(),base:$("pb").value.trim(),key:$("pk").value.trim(),sso:(P&&P.sso)||null};
+ await kv.set("profile",P);await kv.set("session",{at:Date.now(),exp:Date.now()+7*864e5});showApp()};
+$("out").onclick=async()=>{await kv.set("session",null);try{google.accounts.id.disableAutoSelect()}catch(e){}showLogin()};
 $("prof").onclick=showLogin;
 $("file").onchange=e=>{const f=e.target.files[0];if(!f)return;if(f.size>200000){$("st").textContent="File too large (max 200 KB).";return}
  const r=new FileReader();r.onload=()=>{fileText=String(r.result).slice(0,12000);$("st").textContent="Loaded "+f.name+"."};r.readAsText(f)};
@@ -141,7 +144,7 @@ ${w&&w.text?`Use this Wikipedia extract (page: ${w.title}) as the factual base. 
   const ds=String(d.subject||"").trim();
   if(ds&&ds.toLowerCase()!==(SUB||"").toLowerCase()){const f=SUBS.find(x=>x.toLowerCase()===ds.toLowerCase());if(f)SUB=f;else{SUBS.push(ds);SUB=ds;await kv.set("subs",SUBS)}d.note="This topic looks like “"+SUB+"”, so the subject was switched automatically.";drawSubs()}
   d.wiki=w?{title:w.title,url:w.url,img:w.img,text:w.text.slice(0,900)}:null;
-  render(d);$("st").textContent="";const H=(await kv.get("hist"))||[];H.unshift({at:Date.now(),topic:(SUB?SUB+": ":"")+src.slice(0,50),d});await kv.set("hist",H.slice(0,10));loadHist()
+  d.id=Date.now();d.title=src.split("\n")[0].slice(0,70);d.subj=SUB;d.cls=P.cls;render(d);$("st").textContent="";const H=(await kv.get("hist"))||[];H.unshift({at:Date.now(),topic:(SUB?SUB+": ":"")+src.slice(0,50),d});await kv.set("hist",H.slice(0,200));loadHist();saveTopic(d)
  }catch(e){$("st").className="err";$("st").textContent="AI error: "+e.message}
  $("go").disabled=false};
 function dia(dg){const N=((dg&&dg.nodes)||[]).slice(0,6).map(x=>String(x).slice(0,28));if(N.length<2)return null;
@@ -150,7 +153,7 @@ function dia(dg){const N=((dg&&dg.nodes)||[]).slice(0,6).map(x=>String(x).slice(
  N.forEach((n,i)=>{const y=i*64+4,r=mk("rect",{x:20,y,width:280,height:44,rx:12});r.style.cssText="fill:var(--ac2);stroke:var(--ac);stroke-width:1.5";
   const t=mk("text",{x:160,y:y+27,"text-anchor":"middle"});t.style.cssText="fill:var(--tx);font:600 14px system-ui,sans-serif";t.textContent=(i+1)+". "+n;s.append(r,t);
   if(i<N.length-1){const a=mk("path",{d:`M160 ${y+44}L160 ${y+60}M155 ${y+55}L160 ${y+60}L165 ${y+55}`,fill:"none"});a.style.cssText="stroke:var(--ac);stroke-width:2";s.append(a)}});return s}
-let CTX="",CH=[];
+let CTX="",CH=[],CURD=null;
 function render(d){const R=$("res");R.replaceChildren();
  if(d.note)R.append(h("p",{className:"mu",textContent:"ℹ️ "+d.note}));
  const S=[["Introduction",d.intro],["Description",d.desc],["Usability",d.use],["Conclusion",d.concl]].filter(x=>x[1]);if(!S.length&&d.cleaned)S.push(["Notes",d.cleaned]);
@@ -158,7 +161,7 @@ function render(d){const R=$("res");R.replaceChildren();
  if(d.wiki&&d.wiki.img){const im=h("img",{src:d.wiki.img,alt:d.wiki.title,referrerPolicy:"no-referrer"});im.style.cssText="max-width:100%;border-radius:12px;display:block;margin:0 auto 8px";c1.append(im)}
  S.forEach(([l,t])=>c1.append(h("p",{},h("b",{textContent:l+": "}),cl(t))));
  if(d.wiki){const a=h("a",{href:d.wiki.url,target:"_blank",rel:"noopener",textContent:"Wikipedia: "+d.wiki.title});c1.append(h("p",{className:"mu"},"Source: ",a))}
- R.append(c1);CTX=S.map(x=>x[1]).join(" ")+(d.wiki?" Reference: "+d.wiki.text:"");CH=[];
+ R.append(c1);CTX=S.map(x=>x[1]).join(" ")+(d.wiki?" Reference: "+d.wiki.text:"");CH=[];CURD=d;
  const g=dia(d.diagram);if(g)R.append(h("div",{className:"card"},h("h2",{textContent:"Diagram: "+((d.diagram&&d.diagram.title)||"")}),g));
  if((d.schedule||[]).length){const c3=h("div",{className:"card"},h("h2",{},"Today’s schedule"));d.schedule.forEach(s=>c3.append(h("div",{className:"q"},h("span",{className:"t",textContent:s.t+" min"}),s.task||"")));R.append(c3)}
  const c4=h("div",{className:"card"},h("h2",{},"10-question practice set"),h("p",{className:"mu",textContent:"Try each one first, then tap to check."}));
@@ -168,11 +171,53 @@ function render(d){const R=$("res");R.replaceChildren();
  const send=async()=>{const q=inp.value.trim();if(!q||btn.disabled)return;inp.value="";btn.disabled=true;CH.push({r:"u",t:q});draw();
   const hist=CH.slice(-7,-1).map(x=>(x.r==="u"?"Student: ":"Tutor: ")+x.t).join("\n");
   try{const t=await llm(`You are a kind expert tutor for ${P.cls}, subject ${SUB||"general"}. Reply in ${lang()} (mix naturally if the student does). Topic notes: ${CTX}\n${hist}\nStudent: ${q}\nAnswer simply in under 600 characters. If the question is unrelated to studying or unsafe, politely steer back to the topic. If unsure, say so.`);CH.push({r:"a",t:t.trim()})}catch(e){CH.push({r:"a",t:"AI error: "+e.message})}
-  draw();btn.disabled=false};
+  draw();btn.disabled=false;saveChat()};
  btn.onclick=send;inp.onkeydown=e=>{if(e.key==="Enter")send()};
+ if(d.id)kv.get("chat:"+d.id).then(c=>{if(c&&c.length&&CURD===d){CH=c;draw()}});
  R.append(h("div",{className:"card"},h("h2",{},"💬 Ask your tutor"),box,row),h("p",{className:"mu",textContent:"You’ve got this. Small steps every day add up. 💪"}))}
 async function loadHist(){const H=(await kv.get("hist"))||[];$("histc").classList.toggle("hide",!H.length);const b=$("hist");b.replaceChildren();
- H.forEach(x=>{const e=h("div",{className:"q"},h("button",{className:"g",textContent:new Date(x.at).toLocaleDateString()+" · "+x.topic}));e.firstChild.onclick=()=>{render(x.d);scrollTo(0,0)};b.append(e)})}
+ H.slice(0,15).forEach(x=>{const e=h("div",{className:"q"},h("button",{className:"g",textContent:new Date(x.at).toLocaleDateString()+" · "+x.topic}));e.firstChild.onclick=()=>{x.d.id=x.d.id||x.at;render(x.d);scrollTo(0,0)};b.append(e)})}
+/* ---------- Google sign-in (SSO) ---------- */
+let ssoDone=false;
+function ssoInit(){const on=!!GOOGLE_CLIENT_ID;$("sso").classList.toggle("hide",!on);if(!on||ssoDone)return;
+ const go=()=>{google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:onCred});google.accounts.id.renderButton($("gbtn"),{theme:"outline",size:"large",text:"signin_with",shape:"pill"});ssoDone=true};
+ if(window.google&&google.accounts)return go();
+ const s=document.createElement("script");s.src="https://accounts.google.com/gsi/client";s.async=true;s.onload=go;s.onerror=()=>{$("gbtn").textContent="Google sign-in needs an internet connection."};document.head.append(s)}
+function jwt(t){try{const b=t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");return JSON.parse(decodeURIComponent(escape(atob(b+"=".repeat((4-b.length%4)%4)))))}catch(e){return null}}
+async function onCred(r){const c=jwt(r.credential);if(!c||!c.sub)return;
+ const old=await kv.get("profile");
+ if(old&&old.sso&&old.sso.sub!==c.sub&&!confirm("This device already holds another student’s profile. Replace it with this Google account?"))return;
+ P=(old&&(!old.sso||old.sso.sub===c.sub))?old:{cls:"Class 8",language:"English",provider:"qwen",model:"",base:"",key:"",school:""};
+ P.name=P.name||c.given_name||c.name||"Student";P.sso={provider:"google",sub:c.sub,email:c.email||""};
+ await kv.set("profile",P);await kv.set("session",{at:Date.now(),exp:Date.now()+7*864e5});
+ if(P.key)showApp();else showLogin()}
+/* ---------- local folder + backup ---------- */
+const SUP=!!window.showDirectoryPicker;let DIR=null;
+const slug=t=>String(t||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40)||"topic";
+const fname=d=>new Date(d.id).toISOString().slice(0,10)+"-"+d.id+"-"+slug(d.title)+".md";
+function mdTopic(d){const L=["# "+(d.title||"Topic"),"","Subject: "+(d.subj||"")+" | "+(d.cls||"")+" | "+new Date(d.id).toLocaleString(),""];
+ [["Introduction",d.intro],["Description",d.desc],["Usability",d.use],["Conclusion",d.concl]].forEach(([l,t])=>{if(t)L.push("## "+l,"",cl(t),"")});
+ if(d.diagram&&d.diagram.nodes)L.push("## Diagram: "+(d.diagram.title||""),"",...d.diagram.nodes.map((n,i)=>(i+1)+". "+n),"");
+ if(d.schedule&&d.schedule.length)L.push("## Schedule","",...d.schedule.map(s=>"- "+s.t+" min: "+s.task),"");
+ if(d.questions&&d.questions.length){L.push("## Practice questions","");d.questions.forEach((q,i)=>L.push((i+1)+". "+q.q,"   - Answer: "+q.a));L.push("")}
+ if(d.wiki)L.push("Source: "+d.wiki.title+" ("+d.wiki.url+")");return L.join("\n")}
+const mdChat=(d,C)=>["# Chat: "+(d.title||"Topic"),"",...C.map(m=>(m.r==="u"?"**Student:** ":"**Tutor:** ")+m.t+"\n")].join("\n");
+async function dirOk(ask){if(!DIR)return false;try{let p=await DIR.queryPermission({mode:"readwrite"});if(p==="granted")return true;if(ask){p=await DIR.requestPermission({mode:"readwrite"});return p==="granted"}}catch(e){}return false}
+async function wr(sub,name,text){const root=await DIR.getDirectoryHandle("NalandaKnowledgeBook",{create:true});const dd=sub?await root.getDirectoryHandle(sub,{create:true}):root;const f=await dd.getFileHandle(name,{create:true});const w=await f.createWritable();await w.write(text);await w.close()}
+async function saveTopic(d){if(!d||!d.id||!(await dirOk(false)))return;try{await wr("topics",fname(d),mdTopic(d))}catch(e){}}
+async function saveChat(){if(!CURD||!CURD.id)return;await kv.set("chat:"+CURD.id,CH);if(!CH.length||!(await dirOk(false)))return;try{await wr("chats",fname(CURD),mdChat(CURD,CH))}catch(e){}}
+async function syncAll(){const H=(await kv.get("hist"))||[];for(const x of H){x.d.id=x.d.id||x.at;await saveTopic(x.d);const c=await kv.get("chat:"+x.d.id);if(c&&c.length){try{await wr("chats",fname(x.d),mdChat(x.d,c))}catch(e){}}}
+ try{await wr("","subjects.json",JSON.stringify({subjects:SUBS,levels:LV},null,2))}catch(e){}}
+async function updStor(){const st=$("stm");$("pick").hidden=!SUP;$("recon").hidden=true;
+ if(!SUP){st.textContent="Choosing a folder isn’t supported in this browser (Android browsers don’t allow it). Your topics and chats are saved inside the app on this device. Use “Export backup” to keep a copy.";return}
+ DIR=DIR||(await kv.get("dir"))||null;
+ if(!DIR){st.textContent="No folder chosen yet. Pick one and every topic and chat is saved there as .md files.";return}
+ if(await dirOk(false))st.textContent="Saving to: "+DIR.name+"/NalandaKnowledgeBook (topics and chats folders).";else{st.textContent="Folder “"+DIR.name+"” needs permission again.";$("recon").hidden=false}}
+$("pick").onclick=async()=>{try{DIR=await showDirectoryPicker({mode:"readwrite",id:"nkb"});await kv.set("dir",DIR);await syncAll()}catch(e){}updStor()};
+$("recon").onclick=async()=>{if(await dirOk(true))await syncAll();updStor()};
+$("exp").onclick=async()=>{const H=(await kv.get("hist"))||[],chats={};for(const x of H){const id=x.d.id||x.at,c=await kv.get("chat:"+id);if(c)chats[id]=c}
+ const pr=Object.assign({},P);delete pr.key;const b=new Blob([JSON.stringify({exported:new Date().toISOString(),profile:pr,subjects:SUBS,levels:LV,topics:H,chats},null,2)],{type:"application/json"});
+ const a=h("a",{href:URL.createObjectURL(b),download:"NalandaKnowledgeBook-backup-"+new Date().toISOString().slice(0,10)+".json"});document.body.append(a);a.click();a.remove()};
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 init();
 </script></body></html>
