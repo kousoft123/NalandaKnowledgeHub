@@ -130,7 +130,7 @@ $("chk").onclick=async()=>{if(!SUB)return;const d=$("diag");d.textContent="Prepa
   LV[SUB]={level:r.level||"Developing",note:r.note||"",at:Date.now()};await kv.set("lv",LV);drawSubs()}catch(e){b.disabled=false;b.textContent="Try again"}}
  }catch(e){d.replaceChildren(h("span",{className:"err",textContent:"AI error: "+e.message}))}};
 /* ---------- study plan ---------- */
-const cl=t=>{t=String(t||"").trim();if(t.length<=300)return t;const c=t.slice(0,300),i=Math.max(c.lastIndexOf(". "),c.lastIndexOf("।"));return i>140?c.slice(0,i+1):c.slice(0,299)+"…"};
+const cl=t=>{t=String(t||"").trim();const w=t.split(/\s+/);if(w.length<=125)return t;const c=w.slice(0,125).join(" "),i=Math.max(c.lastIndexOf(". "),c.lastIndexOf("।"),c.lastIndexOf("? "),c.lastIndexOf("! "));return i>c.length*.6?c.slice(0,i+1):c+"…"};
 async function wiki(q){try{const u="https://en.wikipedia.org/w/api.php?format=json&origin=*&";
  const s=await(await fetch(u+"action=query&list=search&srlimit=1&srsearch="+encodeURIComponent(q))).json();const t=s.query.search[0]&&s.query.search[0].title;if(!t)return null;
  const e=await(await fetch(u+"action=query&prop=extracts|pageimages&exintro=1&explaintext=1&exchars=1800&piprop=thumbnail&pithumbsize=600&redirects=1&titles="+encodeURIComponent(t))).json();
@@ -140,7 +140,7 @@ $("go").onclick=async()=>{const src=($("notes").value+"\n"+fileText).trim();if(!
  try{if($("wk").checked){$("st").textContent="Searching Wikipedia…";w=await wiki(src.split("\n")[0].slice(0,80))}
   $("st").textContent="Writing your lesson…";
   const d=await ai(`You are a warm, clear tutor. Known subjects: ${JSON.stringify(SUBS)}. Selected subject: ${SUB||"none"}. Student class: ${P.cls}. Measured understanding: ${(LV[SUB]&&LV[SUB].level)||"not assessed, so infer from their notes and adapt"}. Preferred language: ${lang()} (mix naturally if they code-switch, e.g. Hinglish). Minutes today: ${m}. Match vocabulary and depth to the class; keep facts correct and say so if unsure.
-${w&&w.text?`Use this Wikipedia extract (page: ${w.title}) as the factual base. Simplify it for the class level; do not copy its sentences:\n"""${w.text}"""\n`:""}Student topic or notes:\n"""${src}"""\nReturn ONLY JSON: {"subject":"best subject for this topic: a known subject name if it fits, else a short new subject name","intro":"Introduction","desc":"Description","use":"Usability: real-life uses","concl":"Conclusion","diagram":{"title":"short title","nodes":["3 to 6 short parts or steps, max 24 characters each, in order"]},"schedule":[{"t":minutes_int,"task":"..."}] (minutes sum to ${m}),"questions":[{"q":"...","a":"short answer"}]}. Each of intro, desc, use and concl must be between 150 and 300 characters long, count carefully. Exactly 10 questions, easy to hard, with short answers.`);
+${w&&w.text?`Use this Wikipedia extract (page: ${w.title}) as the factual base. Simplify it for the class level; do not copy its sentences:\n"""${w.text}"""\n`:""}Student topic or notes:\n"""${src}"""\nReturn ONLY JSON: {"subject":"best subject for this topic: a known subject name if it fits, else a short new subject name","intro":"Introduction","desc":"Description","use":"Usability: real-life uses","concl":"Conclusion","diagram":{"title":"short title","nodes":["3 to 6 short parts or steps, max 24 characters each, in order"]},"schedule":[{"t":minutes_int,"task":"..."}] (minutes sum to ${m}),"questions":[{"q":"...","a":"short answer"}]}. Together, intro, desc, use and concl must total 300 to 500 words (about 75 to 125 words each). Write clear, well-organised paragraphs with a real-life example in desc or use, and count the words carefully. Exactly 10 questions, easy to hard, with short answers.`);
   const ds=String(d.subject||"").trim();
   if(ds&&ds.toLowerCase()!==(SUB||"").toLowerCase()){const f=SUBS.find(x=>x.toLowerCase()===ds.toLowerCase());if(f)SUB=f;else{SUBS.push(ds);SUB=ds;await kv.set("subs",SUBS)}d.note="This topic looks like “"+SUB+"”, so the subject was switched automatically.";drawSubs()}
   d.wiki=w?{title:w.title,url:w.url,img:w.img,text:w.text.slice(0,900)}:null;
@@ -160,6 +160,7 @@ function render(d){const R=$("res");R.replaceChildren();
  const c1=h("div",{className:"card"},h("h2",{},"Topic overview"));
  if(d.wiki&&d.wiki.img){const im=h("img",{src:d.wiki.img,alt:d.wiki.title,referrerPolicy:"no-referrer"});im.style.cssText="max-width:100%;border-radius:12px;display:block;margin:0 auto 8px";c1.append(im)}
  S.forEach(([l,t])=>c1.append(h("p",{},h("b",{textContent:l+": "}),cl(t))));
+ c1.append(h("p",{className:"mu",textContent:S.reduce((a,x)=>a+cl(x[1]).split(/\s+/).length,0)+" words"}));
  if(d.wiki){const a=h("a",{href:d.wiki.url,target:"_blank",rel:"noopener",textContent:"Wikipedia: "+d.wiki.title});c1.append(h("p",{className:"mu"},"Source: ",a))}
  R.append(c1);CTX=S.map(x=>x[1]).join(" ")+(d.wiki?" Reference: "+d.wiki.text:"");CH=[];CURD=d;
  const g=dia(d.diagram);if(g)R.append(h("div",{className:"card"},h("h2",{textContent:"Diagram: "+((d.diagram&&d.diagram.title)||"")}),g));
