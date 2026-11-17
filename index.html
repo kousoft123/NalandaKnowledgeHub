@@ -40,7 +40,7 @@ li{margin:6px 0}.t{display:inline-block;background:var(--ac2);color:var(--ac);bo
 <div class="row"><div><label>Provider</label><select id="pp"></select></div><div><label>Model</label><input id="pm" autocapitalize="off"></div></div>
 <div id="bw" class="hide"><label>API base URL</label><input id="pb" placeholder="https://…/v1" autocapitalize="off"></div>
 <label>API key</label><input id="pk" type="password" autocomplete="off">
-<p class="mu">Your key stays on this device and is sent only to the provider you pick. Ask a parent or teacher to create the key for you. Some providers (Gemini, Groq) offer free tiers. Model names change over time, so edit the model box if a provider rejects it.</p>
+<p class="mu">Default: a free Qwen model through OpenRouter. Create a free key at openrouter.ai/keys, then at openrouter.ai/settings/privacy allow free models. Free models can use prompts for training and have daily limits, so never type private details. Your key stays on this device and is sent only to the provider you pick. Ask a parent or teacher to create the key for you. Some providers (Gemini, Groq) offer free tiers. Model names change over time, so edit the model box if a provider rejects it.</p>
 <p><button id="save">Save and start</button></p>
 </div>
 
@@ -70,6 +70,7 @@ async get(k){try{const d=await this.o();return await new Promise(r=>{const q=d.t
 async set(k,v){try{const d=await this.o();await new Promise(r=>{const t=d.transaction("kv","readwrite");t.objectStore("kv").put(v,k);t.oncomplete=r;t.onerror=r})}catch(e){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}}};
 /* ---------- LLM providers (bring your own key) ---------- */
 const PRV={
+ qwen:{n:"Qwen (free, via OpenRouter)",kind:"oai",base:"https://openrouter.ai/api/v1",model:"qwen/qwen3.8-27b:free",fb:"openrouter/free"},
  openai:{n:"OpenAI",kind:"oai",base:"https://api.openai.com/v1",model:"gpt-4o-mini"},
  anthropic:{n:"Anthropic Claude",kind:"anth",model:"claude-haiku-5-5"},
  gemini:{n:"Google Gemini (free tier)",kind:"gem",model:"gemini-2.0-flash"},
@@ -84,8 +85,9 @@ async function llm(text){
  if(pv.kind==="gem"){r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(m)+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":k},body:JSON.stringify({contents:[{parts:[{text}]}]})});
   j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||r.status);return j.candidates[0].content.parts.map(p=>p.text||"").join("")}
  const base=(P.base||pv.base||"").replace(/\/$/,"");if(!base)throw new Error("Add the API base URL in Settings.");
- r=await fetch(base+"/chat/completions",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify({model:m,messages:[{role:"user",content:text}]})});
- j=await r.json();if(!r.ok)throw new Error(j.error&&(j.error.message||j.error)||r.status);return j.choices[0].message.content}
+ const call=async mod=>{r=await fetch(base+"/chat/completions",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify({model:mod,messages:[{role:"user",content:text}]})});
+  j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(r.status===429?"Free limit reached for now. Try later or choose another provider.":(j.error&&(j.error.message||j.error)||r.status));e.st=r.status;throw e}return j.choices[0].message.content};
+ try{return await call(m)}catch(e){if(pv.fb&&m===pv.model&&e.st!==401&&e.st!==429)return await call(pv.fb);throw e}}
 function pj(t){t=t.replace(/```json|```/g,"");const i=t.indexOf("{"),e=t.lastIndexOf("}");return JSON.parse(t.slice(i,e+1))}
 const ai=async p=>pj(await llm(p));
 /* ---------- profile / session ---------- */
@@ -95,7 +97,7 @@ $("pp").replaceChildren(...Object.entries(PRV).map(([v,o])=>h("option",{value:v,
 $("pp").onchange=()=>{const o=PRV[$("pp").value];$("pm").value=o.model;$("pb").value=o.base||"";$("bw").classList.toggle("hide",$("pp").value!=="custom")};
 async function init(){P=await kv.get("profile");const s=await kv.get("session");if(P&&s)showApp();else showLogin()}
 function showLogin(){$("app").classList.add("hide");$("login").classList.remove("hide");$("out").hidden=true;$("who").textContent="";
- if(P){$("pn").value=P.name||"";$("pc").value=P.cls||"Class 8";$("ps").value=P.school||"";$("pl").value=P.language||"";$("pp").value=P.provider||"openai";$("pm").value=P.model||"";$("pb").value=P.base||"";$("pk").value=P.key||""}else{$("pp").value="gemini";$("pp").onchange()}
+ if(P){$("pn").value=P.name||"";$("pc").value=P.cls||"Class 8";$("ps").value=P.school||"";$("pl").value=P.language||"";$("pp").value=P.provider||"openai";$("pm").value=P.model||"";$("pb").value=P.base||"";$("pk").value=P.key||""}else{$("pp").value="qwen";$("pp").onchange()}
  $("bw").classList.toggle("hide",$("pp").value!=="custom")}
 async function showApp(){$("login").classList.add("hide");$("app").classList.remove("hide");$("out").hidden=false;$("who").textContent="Hi, "+P.name+" ("+P.cls+")";loadHist();loadSubs()}
 $("save").onclick=async()=>{const n=$("pn").value.trim();if(!n){$("pn").focus();return}
